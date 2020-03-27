@@ -27,11 +27,6 @@ parser.add_argument('--set_env',
                     default="config.env"
                     )
 
-# parser.add_argument('--set_env_aws',
-#                     help="Specify the env file with credentials for the database. Default is config.env",
-#                     default="config.env"
-#                     )
-
 parser.add_argument('--compile_req',
                     help="Takes a path to a major requirement written as YAML and converts it into JSON. Use set_env to specify database credentials",
                     default=""
@@ -42,8 +37,6 @@ parser.add_argument('--s3',
                     action="store_true")
 
 args = parser.parse_args()
-
-
 
 cred = "config.env"
 if args.set_env:
