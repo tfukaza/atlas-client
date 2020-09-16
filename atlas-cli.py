@@ -1,6 +1,6 @@
 import argparse
 import os
-import boto3
+#import boto3
 
 import scrape
 import compiler
@@ -23,18 +23,20 @@ parser.add_argument('--update_lectures',
                     )
 
 parser.add_argument('--set_env',
-                    help="Specify the env file with credentials for the database. Default is config.env",
+                    help="""Specify the env file with credentials for the database. 
+                            Default is config.env""",
                     default="config.env"
                     )
 
-parser.add_argument('--compile_req',
-                    help="Takes a path to a major requirement written as YAML and converts it into JSON. Use set_env to specify database credentials",
+parser.add_argument('--compile-req',
+                    help="""Takes a path to a major requirement written as YAML 
+                            and converts it into JSON. Use set_env to specify database credentials""",
                     default=""
                     )
 
-parser.add_argument('--s3',
-                    help="After running --compile_req, automatically stores the result in AWS S3. Be sure to specify AWS S3 in the aws cli tool",
-                    action="store_true")
+# parser.add_argument('--s3',
+#                     help="After running --compile_req, automatically stores the result in AWS S3. Be sure to specify AWS S3 in the aws cli tool",
+#                     action="store_true")
 
 args = parser.parse_args()
 
@@ -62,14 +64,14 @@ if not args.compile_req == "":
     path = args.compile_req
     compiler.parse(path, cred)
 
-    if args.s3:
+    # if args.s3:
 
-        s3_client = boto3.client('s3')
-        name = path.split('/')[-1] 
-        inst = path.split('/')[-2] 
+    #     s3_client = boto3.client('s3')
+    #     name = path.split('/')[-1] 
+    #     inst = path.split('/')[-2] 
        
-        res = s3_client.upload_file(path + '/req.json', 'atlas-majors-'+inst, name+'-req.json')
-        res = s3_client.upload_file(path + '/desc.json', 'atlas-majors-'+inst, name+'-desc.json')
+    #     res = s3_client.upload_file(path + '/req.json', 'atlas-majors-'+inst, name+'-req.json')
+    #     res = s3_client.upload_file(path + '/desc.json', 'atlas-majors-'+inst, name+'-desc.json')
 
 
   

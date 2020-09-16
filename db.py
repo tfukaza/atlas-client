@@ -1,8 +1,7 @@
 ##############################
-# This module is the interface for other python modules to interact with a
-# PostgreSQL database.  
-# It contains functions to maintain the database, as well as 
-# functions to retrieve data from the database in useful manners
+# This module is the interface between the applicaton and database. 
+# It allows programs to interact with the database without worrying about 
+# details of SQL and connection management.  
 ##############################
 
 import psycopg2
@@ -11,222 +10,165 @@ import json
 import os
 from dotenv import load_dotenv
 
-#Constants used to run the database
-#f = None
+# https://brandur.org/postgres-connections
 
 connection = None
 cursor = None
-# =======================
-# Initializes the tables in the database
-# Make sure there are no tables in the database when running this, otherwise the 
-# function will return an error
-# =======================
 
-def init_db():
+class DbCtx:
+    def __init__(self):
+        self.usr = "" 
+        self.passwd = ""
+        self.host = ""
+        self.port = ""
+        self.database = ""
 
-    print("initializing")
-    cursor.execute("""
+        self.connection = None
+        self.curcor = None
 
-    CREATE TABLE "departments"
-    (
-        "mode"          char(10),
-        "dept_id"       char(10),
-        "dept_name"     char(100)
-    );
-
-    CREATE TABLE "courses"
-    (
-        "dept"          char(10),
-        "course_order"  int,
-        "course_num"    char(8),
-        "course_title"  char(200),
-        "course_unit"   char(10),
-        "course_type"   char(15),
-        "course_req"    json,
-        "course_grade"  char(5),
-        "course_desc"   char(1500)
-    );
-
-    CREATE TABLE "lectures"
-    (
-        "dept"          char(10),
-        "course_num"    char(16),
-        "course_id"     char(9),
-        "term"          char(4),     
-        "lec_name"      char(16),
-        "lec_status"    char(32),
-        "lec_capacity"  json,
-        "lec_w_status"  char(32),
-        "lec_w_capacity"json,
-        "lec_day"       char(16),
-        "lec_time_s"    char(16),
-        "lec_time_e"    char(16),
-        "lec_location"  char(64),
-        "lec_inst"      char(64)
-
-    );
-
-    CREATE TABLE "discussions"
-    (
-        "lec_id"        char(9),
-        "course_id"     char(9),
-        "term"          char(4),     
-        "dis_name"      char(16),
-        "dis_status"    char(32),
-        "dis_capacity"  json,
-        "dis_w_status"  char(32),
-        "dis_w_capacity"json,
-        "dis_day"       char(8),
-        "dis_time_s"    char(16),
-        "dis_time_e"    char(16),
-        "dis_location"  char(64),
-        "dis_inst"      char(64)
-    );
+    def InitDb(self):
+        self._OpenConnection()
     
-    """)
-    connection.commit()
+    def DelDb(self):
+        self._CloseConnection()
 
+    # Initializes the tables in the database
+    # Make sure there are no tables in the database when running this, otherwise the 
+    # function will return an error
+    #def RunSql(path):
 
-# =======================
-# Provided a path to the config file, opens a connection to the database using the 
-# provided configurations
-# Config files should be a text file containing the:
-#   database username
-#   password
-#   IP address
-#   port number
-#   database name
-# in each line 
-# =======================
-def open_connection(path="config.env"):
+    # Provided a path to the config file, opens a connection to the database using the 
+    # provided configurations
+    # Config files should be a text file containing the:
+    #   database username
+    #   password
+    #   IP address
+    #   port number
+    #   database name
+    # in each line 
+    def _OpenConnection(self, path="config.env"):
+        load_dotenv(verbose=True)
+        load_dotenv(path)
 
-    global f 
-    global usr 
-    global passwd 
-    global host 
-    global port 
-    global database 
+        self.usr =       os.environ.get("DB_USR")
+        self.passwd =    os.environ.get("DB_PASSWD")
+        self.host =      os.environ.get("DB_IP")
+        self.port =      os.environ.get("DB_PORT")
+        self.database =  os.environ.get("DB_NAME")
 
-    global connection 
-    global cursor 
+        print("Establishing connection with database")
+        connection = psycopg2.connect(  user = self.usr,
+                                        password = self.passwd,
+                                        host = self.host,
+                                        port = self.port,
+                                        database = self.database)
+        # For now assume one cursor per connection
+        cursor = connection.cursor()
+        print("Established")
 
-    load_dotenv(verbose=True)
-    load_dotenv(path)
+    # Closes connection with the database 
+    def _CloseConnection(self):
+        if self.connection:
+            self.cursor.close()
+            self.connection.close()
+        else:
+            print("No open connections")
 
-    usr =       os.environ.get("DB_USR")
-    passwd =    os.environ.get("DB_PASSWD")
-    host =      os.environ.get("DB_IP")
-    port =      os.environ.get("DB_PORT")
-    database =  os.environ.get("DB_NAME")
+    # Queries the database, provided a command as a string
+    def RunQuery(self, q):
+        self.cursor.execute(q)
+        result = self.cursor.fetchall()
+        self.connection.commit()
 
-    print("Establishing connection with database")
-    connection = psycopg2.connect(  user = usr,
-                                    password = passwd,
-                                    host = host,
-                                    port = port,
-                                    database = database)
-    cursor = connection.cursor()
-    
-    print("Established")
+        return result
 
-# =======================
-# Closes connection with the database 
-# =======================
+    # Adds a department to the table
+    # Ignored if department already exists
+    def AddDept(self, mode, dept_id, dept_name):
 
-def close_connection():
- 
-    if connection:
-        cursor.close()
-        connection.close()
-    else:
-        print("No open connections")
+        result = self.RunQuery("SELECT * FROM departments WHERE dept_name='" + dept_name + "';")
 
+        if len(result) == 0:
+            command = "INSERT INTO departments "
+                    + "VALUES ("
+                    + "'" + mode + "', "
+                    + "'" + dept_id + "', "
+                    + "'" + dept_name + "') "
+                    + "ON CONFLICT (dept_id) DO NOTHING;"
+            self.cursor.execute(command)
+            self.connection.commit()
 
-# =======================
-# Queries the database, provided a command as a string
-# =======================
+    # Given information regarding a course, updates its information in the table
+    # If the course does not exist yet, it will be newly created
+    def UpdateCourse(course):
+        #check if course exists in db
+        # chk = "SELECT course_order FROM courses WHERE dept='" + course["dept"] + "' AND course_num='" + course["course_num"] + "';"
+        # cursor.execute(chk)
+        # result = cursor.fetchall()
 
-def query_db(q):
+        command = """
+                INSERT INTO courses
+                (
+                    dept_id,
+                    course_order,
+                    course_num,
+                    course_title,
+                    course_unit_t,
+                    course_unit_s,
+                    course_unit_e,
+                    course_type,
+                    course_req,
+                    course_grade,
+                    course_desc
+                )
+                VALUES (
+                    '{0}', '{1}', '{2}', '{3}', '{4}', '{5}', '{6}', '{7}', '{8}', '{9}', '{10}'
+                )
+                ON CONFLICT (dept_id, course_num, course_title)
+                DO UPDATE SET
+                    course_order = '{1}'
+                    course_unit_t = {4},
+                    course_unit_s = {5},
+                    course_unit_e = {6},
+                    course_type = {7},
+                    course_req = {8},
+                    course_grade = {9},
+                    course_desc = {10}
+                WHERE
+                    dept_id = {0},
+                    course_num = {2},
+                    course_title = {3}
+                ;
+                """.format(
+                    course["dept"], 
+                    str(course["course_order"]), 
+                    course["course_num"], 
+                    course["course_title"], 
+                    course["course_unit_t"], 
+                    course["course_unit_s"], 
+                    course["course_unit_e"], 
+                    course["course_type"], 
+                    json.dumps(course["course_req"]), 
+                    course["course_grade"], 
+                    course["course_desc"],
+                )
+                        
+        # # if course exist, update it
+        # else:
+        #     command = "UPDATE courses "
+        #     command+= "SET "
+        #     command+= "course_order = " + str(result[0][0]) + ", "
+        #     command+= "course_num = '" + course["course_num"] + "', "
+        #     command+= "course_title = '" + course["course_title"] + "', "
+        #     command+= "course_unit = '" + course["course_unit"] + "', "
+        #     command+= "course_type='" + course["course_type"] + "', "
+        #     command+= "course_req='" + json.dumps(course["course_req"]) + "', "
+        #     command+= "course_grade='" + course["course_grade"] + "', "
+        #     command+= "course_desc='" + course["course_desc"] + "'" 
+        #     command+= "WHERE dept='" + course["dept"] + "' AND course_num='" + course["course_num"] + "';"
 
-    cursor.execute(q)
-    result = cursor.fetchall()
-    connection.commit()
-
-    return result
-
-# =======================
-# Deletes tables in the database
-# =======================
-
-def delete_db():
-    cursor.execute("""
-    DROP TABLE departments;
-    DROP TABLE courses;
-    DROP TABLE lectures;
-    DROP TABLE discussions;
-    """)
-    connection.commit()
-
-# =======================
-# Adds a department to the table
-# Ignored if department already exists
-# =======================
-
-def addDept(mode, dept_id, dept_name):
-
-    result = query_db("SELECT * FROM departments WHERE dept_name='" + dept_name + "';")
-
-    if len(result) == 0:
-        command = "INSERT INTO departments "
-        command+="VALUES ("
-        command+="'" + mode + "', "
-        command+="'" + dept_id + "', "
-        command+="'" + dept_name + "'); "
         cursor.execute(command)
         connection.commit()
-
-# =======================
-# Given information regarding a course, updates its information in the table
-# If the course does not exist yet, it will be newly created
-# =======================
-def update_course(course):
-    #check if course exists in db
-    chk = "SELECT course_order FROM courses WHERE dept='" + course["dept"] + "' AND course_num='" + course["course_num"] + "';"
-    cursor.execute(chk)
-    result = cursor.fetchall()
-
-    command = ""
-
-    #if course does not exist yet, add it
-    if len(result) == 0:
-        command = "INSERT INTO courses "
-        command+="VALUES ("
-        command+="'" + course["dept"] + "', "
-        command+=" " + str(course["course_order"]) + ", "
-        command+="'" +course["course_num"] + "', "
-        command+="'" +course["course_title"] + "', "
-        command+="'" +course["course_unit"] + "', "
-        command+="'" +course["course_type"] + "', "
-        command+="'" +json.dumps(course["course_req"]) + "', "
-        command+="'" +course["course_grade"] + "', "
-        command+="'" +course["course_desc"] + "');"
-
-    # if course exist, update it
-    else:
-        command = "UPDATE courses "
-        command+= "SET "
-        command+= "course_order = " + str(result[0][0]) + ", "
-        command+= "course_num = '" + course["course_num"] + "', "
-        command+= "course_title = '" + course["course_title"] + "', "
-        command+= "course_unit = '" + course["course_unit"] + "', "
-        command+= "course_type='" + course["course_type"] + "', "
-        command+= "course_req='" + json.dumps(course["course_req"]) + "', "
-        command+= "course_grade='" + course["course_grade"] + "', "
-        command+= "course_desc='" + course["course_desc"] + "'" 
-        command+= "WHERE dept='" + course["dept"] + "' AND course_num='" + course["course_num"] + "';"
-
-    cursor.execute(command)
-    connection.commit()
 
 # =======================
 # Given an id and term for a lecture, adds it to the table if it does not exist yet
